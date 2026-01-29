@@ -1,5 +1,7 @@
 import GridModel from "./GridModel";
 import BoosterService from "./BoosterService";
+import HintService from "./HintService";
+import BonusService from "./BonusService";
 import { GAME_CONFIG } from "./GameConfig";
 
 const {ccclass, property} = cc._decorator;
@@ -15,6 +17,7 @@ export default class GameController extends cc.Component {
     @property(cc.AudioClip) bombBig: cc.AudioClip = null;
     @property(cc.AudioClip) soundWin: cc.AudioClip = null;  // Мелодия победы
     @property(cc.AudioClip) soundLose: cc.AudioClip = null; // Мелодия проигрыша
+    @property(cc.AudioClip) soundShuffle: cc.AudioClip = null; // звук перемешивания кубиков
 
     // >>> UI ЭЛЕМЕНТЫ <<<
     @property(cc.Node) gameplayUI: cc.Node = null; // Узел со всей игрой
@@ -23,6 +26,7 @@ export default class GameController extends cc.Component {
     @property(cc.Node) restartButtonNode: cc.Node = null;
     @property(cc.Label) ScoreCount: cc.Label = null;
     @property(cc.Label) movesLabel: cc.Label = null;
+    @property(cc.Label) endGameScoreLabel: cc.Label = null;
 
     // >>> БУСТЕРЫ И ПОЛЕ <<<
     @property(cc.Prefab) tilePrefab: cc.Prefab = null; 
@@ -34,6 +38,8 @@ export default class GameController extends cc.Component {
     @property(cc.Label) boosterBombLabel: cc.Label = null;
 
     private model: GridModel = null;
+    private hintService: HintService = null;
+    private bonusService: BonusService = null;
     private nodesGrid: cc.Node[][] = [];
 
     // НАСТРОЙКИ БАЛАНСА
@@ -58,13 +64,19 @@ export default class GameController extends cc.Component {
     private bombIdx: number = 5;
     private maxBombIdx: number = 6;
 
+    private isEndingStarted: boolean = false;
+
     start() {
+        this.isEndingStarted = false;
         this.model = new GridModel(this.rows, this.cols);
+        this.bonusService = new BonusService(this, this.model);
+        this.hintService = new HintService(this, this.model, this.blockIndices);
         if (this.gameplayUI) this.gameplayUI.active = true;
         if (this.endGameUI) this.endGameUI.active = false;
         this.updateUI();
         this.generateField();
         this.setupEventListeners(); 
+        this.hintService.resetTimer();
     }
 
     setupEventListeners() {
@@ -183,7 +195,7 @@ export default class GameController extends cc.Component {
 
     generateField() {
         this.model.initGrid();
-        this.nodesGrid = [];
+        this.nodesGrid.length = 0;
         this.fieldBg.removeAllChildren();
         for (let r = 0; r < this.rows; r++) {
             this.nodesGrid[r] = [];
@@ -214,6 +226,7 @@ export default class GameController extends cc.Component {
 
     // Обработка нажатия на плитку
     onTileClick(r: number, c: number) {
+        if (this.hintService) this.hintService.resetTimer();
         if (this.isTeleportActive) {
             this.handleTeleportSwap(r, c);
             return; 
@@ -284,45 +297,83 @@ export default class GameController extends cc.Component {
     
     // Проверка условий победы или поражения
     checkGameState() {
-        if (this.currentScore >= this.targetScore) this.showEndGame(true);
-        else if (this.currentMoves <= 0) this.showEndGame(false);
-        else if (!this.model.hasPossibleMatches(this.blockIndices)) {
+        if (this.isEndingStarted) return;
+        if (this.currentScore >= this.targetScore) {
+            this.bonusService.startWinBonus();
+            return;
+        }
+        const hasMovesOnBoard = this.model.hasPossibleMatches(this.blockIndices, GAME_CONFIG.MIN_MATCH_SIZE);
+        if (!hasMovesOnBoard) {
+            // Если ходов нет, проверяем, не исчерпан ли лимит ШАФЛОВ
             if (this.autoShuffleCount < GAME_CONFIG.AUTO_SHUFFLE_LIMIT) {
                 this.autoShuffleCount++;
-                this.executeShuffleLogic(); // Добавлен отсутствующий метод
-                this.scheduleOnce(() => this.checkGameState(), 0.5);
+                this.executeShuffleLogic();
+                
+                // Ждем 3 секунды (пока закончится вся анимация), 
+                // прежде чем проверять состояние игры снова!
+                this.scheduleOnce(() => this.checkGameState(), 3.0); 
+                return;
             } else {
+                // Если перемешивания кончились - проигрыш
                 this.showEndGame(false);
+                return;
             }
         }
+        if (this.currentMoves <= 0) {
+            this.showEndGame(false);
+        }     
     }
 
     // Логика перемешивания 
     executeShuffleLogic() {
-        let allIDs = [];
+        if (this.soundShuffle) {
+            cc.audioEngine.playEffect(this.soundShuffle, false);
+        }
+
+        // Собираем все ноды в один массив, чтобы удобнее было анимировать
+        let allNodes: cc.Node[] = [];
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
-                if (this.nodesGrid[r][c]) allIDs.push(this.model.gridData[r][c]);
+                if (this.nodesGrid[r][c]) allNodes.push(this.nodesGrid[r][c]);
             }
         }
-        for (let i = allIDs.length - 1; i > 0; i--) {
-            let j = Math.floor(Math.random() * (i + 1));
-            [allIDs[i], allIDs[j]] = [allIDs[j], allIDs[i]];
-        }
-        let counter = 0;
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                if (this.nodesGrid[r][c]) {
-                    let newID = allIDs[counter++];
-                    this.model.gridData[r][c] = newID;
-                    this.nodesGrid[r][c].getComponent(cc.Sprite).spriteFrame = this.tileTextures[newID];
+
+        // анимация закручивания исчезновения
+        // Длительность: 1.2 секунды
+        allNodes.forEach(node => {
+            cc.tween(node)
+                .to(1.2, { scale: 0, angle: 720 }, { easing: 'backIn' }) // Уменьшаем и крутим 2 раза (360 * 2)
+                .delay(0.2) // Короткая пауза, пока они невидимы
+                .to(1.3, { scale: 1, angle: 0 }, { easing: 'backOut' })  // Возвращаем масштаб и угол
+                .start();
+        });
+        this.scheduleOnce(() => {
+            let allIDs = [];
+            for (let r = 0; r < this.rows; r++) {
+                for (let c = 0; c < this.cols; c++) {
+                    if (this.nodesGrid[r][c]) allIDs.push(this.model.gridData[r][c]);
                 }
             }
-        }
+            for (let i = allIDs.length - 1; i > 0; i--) {
+                let j = Math.floor(Math.random() * (i + 1));
+                [allIDs[i], allIDs[j]] = [allIDs[j], allIDs[i]];
+            }
+            let counter = 0;
+            for (let r = 0; r < this.rows; r++) {
+                for (let c = 0; c < this.cols; c++) {
+                    if (this.nodesGrid[r][c]) {
+                        let newID = allIDs[counter++];
+                        this.model.gridData[r][c] = newID;
+                        this.nodesGrid[r][c].getComponent(cc.Sprite).spriteFrame = this.tileTextures[newID];
+                    }
+                }
+            }
+        }, 1.3)
     }
 
     // Метод для показа финала
     showEndGame(isWin: boolean) {
+        if (this.endGameUI && this.endGameUI.active) return;
         if (isWin) {
             cc.audioEngine.playEffect(this.soundWin, false);
         } else {
@@ -332,6 +383,9 @@ export default class GameController extends cc.Component {
         if (this.endGameUI) this.endGameUI.active = true;
         if (this.endGameLable) {
             this.endGameLable.string = isWin ? "Вы победили, хотите \n начать новую игру?" : "Вы проиграли, хотите \n начать новую игру?";
+        }
+        if (this.endGameScoreLabel) {
+            this.endGameScoreLabel.string = `${this.currentScore}/${this.targetScore}`;
         }
     }
 
@@ -439,6 +493,9 @@ export default class GameController extends cc.Component {
         booster.setContentSize(100, 112);
         booster["colorID"] = id;
         this.model.gridData[r][c] = id;
+        if (this.soundSmall) {
+            cc.audioEngine.playEffect(this.soundSmall, false);
+        }
         booster.setPosition((c - (this.cols - 1) / 2) * this.spacingX, (r - (this.rows - 1) / 2) * this.spacingY);
         booster.getComponent(cc.Sprite).spriteFrame = this.tileTextures[id];
         booster.on(cc.Node.EventType.TOUCH_END, () => this.onTileClick(r, c));
@@ -454,6 +511,19 @@ export default class GameController extends cc.Component {
         } else if (id === this.maxBombIdx) {
             cc.audioEngine.playEffect(this.bombBig, false);
         }
+    }
+
+    shakeNode(target: cc.Node, intensity: number = 10) {
+        if (!target) return;
+
+        let originalPos = target.getPosition();
+        
+        cc.tween(target)
+            .to(0.05, { position: cc.v3(originalPos.x + intensity, originalPos.y + intensity, 0) })
+            .to(0.05, { position: cc.v3(originalPos.x - intensity, originalPos.y - intensity, 0) })
+            .to(0.05, { position: cc.v3(originalPos.x + intensity, originalPos.y - intensity, 0) })
+            .to(0.05, { position: cc.v3(originalPos.x, originalPos.y, 0) })
+            .start();
     }
 
     // Активация бустера с поддержкой цепных реакций
@@ -476,6 +546,13 @@ export default class GameController extends cc.Component {
             
             if (processedBoosters.has(key)) continue;
             processedBoosters.add(key);
+
+            if (current.id === this.bombIdx) {
+                this.shakeNode(this.fieldBg, 10);
+            } else if (current.id === this.maxBombIdx) {
+                this.shakeNode(this.gameplayUI, 30);
+            }
+            
 
             this.playBoosterSfx(current.id);
             // Получаем область поражения для текущего бустера из сервиса
@@ -561,6 +638,7 @@ export default class GameController extends cc.Component {
         }
         this.scheduleOnce(() => {
             this.checkGameState();
+            if (this.hintService) this.hintService.resetTimer();
         }, GAME_CONFIG.CHECK_STATE_DELAY);
     }
 

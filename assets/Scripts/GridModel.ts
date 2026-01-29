@@ -48,18 +48,40 @@ export default class GridModel {
     }
 
     // Проверка на наличие хотя бы одного возможного хода
-    public hasPossibleMatches(blockIndices: number[]): boolean {
+    public hasPossibleMatches(blockIndices: number[], minMatchSize: number): boolean {
+        // Храним координаты, которые мы уже проверили в этом цикле
+        let checkedCoordinates = new Set<string>();
+
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
+                let key = `${r},${c}`;
+                
+                // Если мы уже проверяли этот кубик в составе какой-то группы, пропускаем
+                if (checkedCoordinates.has(key)) continue;
+
                 let id = this.gridData[r][c];
-                if (blockIndices.indexOf(id) !== -1) {
-                    if (this.isPosValid(r, c + 1) && this.gridData[r][c + 1] === id) return true;
-                    if (this.isPosValid(r + 1, c) && this.gridData[r + 1][c] === id) return true;
-                } else {
-                    return true; // Если это бустер, ход точно есть
+
+                // Если это бустер (его нет в списке обычных блоков) — ход точно есть
+                if (blockIndices.indexOf(id) === -1) {
+                    return true;
                 }
+
+                // Используем наш DFS для поиска всей группы
+                // Важно: передаем новый Set, чтобы findMatches отработал корректно
+                let group = this.findMatches(r, c, id, new Set());
+
+                // Если группа подходит под размер из конфига — ура, ход есть
+                if (group.length >= minMatchSize) {
+                    return true;
+                }
+
+                // Чтобы не проверять каждый кубик этой (маленькой) группы заново, 
+                // помечаем их все как "обработанные"
+                group.forEach(pos => checkedCoordinates.add(`${pos.r},${pos.c}`));
             }
         }
+        
+        // Если прошли всё поле и не нашли ни бустеров, ни групп нужного размера
         return false;
     }
 }
