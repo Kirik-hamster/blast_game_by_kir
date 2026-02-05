@@ -163,9 +163,20 @@ export default class GameController extends cc.Component {
             this.ui.btnResume.on(cc.Node.EventType.TOUCH_END, () => {
                 cc.director.resume();
                 ui.playClickAnimation(this.ui.btnResume, () => {
-                    if (this.ui.menuUI) {
-                        this.ui.menuUI.active = false;
-                        this.ui.gameplayUI.active = true;
+                    if (this.level.isWin()) {
+                        // Если уровней еще много (меньше 10), прибавляем +1 и перезагружаем сцену
+                        if (GlobalData.selectedLevel < 10) {
+                            GlobalData.selectedLevel++;
+                            this.restartGame(); // Сцена перезапустится и сама покажет пре-меню нового уровня
+                        } else {
+                            // Если прошли последний уровень, возвращаемся на карту
+                            cc.director.loadScene("MapScene");
+                        }
+                    }else {
+                        if (this.ui.menuUI) {
+                            this.ui.menuUI.active = false;
+                            this.ui.gameplayUI.active = true;
+                        }
                     }
                 });
             });

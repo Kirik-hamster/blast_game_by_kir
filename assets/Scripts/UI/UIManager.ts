@@ -91,25 +91,25 @@ export default class UIManager extends cc.Component {
         // ПРАВИЛО №1 (Всегда): От какого размера группы лопаются кубики
         const minMatch = config.minMatch || 2;
         // Помечаем вопросом, если правило отличается от стандартного (например, > 2)
-        this.addRuleRow(`Кубики лопаются от размера группы: ${minMatch} кубика.`, true, this.tileTextures[0]);
+        this.addRuleRow(`группа сгорания кубоков от ${minMatch}`, true, this.tileTextures[0]);
 
         // Логика дополнительных правил по уровням
         switch (levelIdx) {
             case 2:
                 // Правило про обычную бомбу
-                this.addRuleRow(`Бомба: лопнутая группа кубиков от ${GAME_CONFIG.THRESHOLDS.BOMB_SMALL.min} шт. При тапе, взрывается.`, false, this.tileTextures[1]);
-                this.addRuleRow(`Ракета: лопнуть группу кубиков от ${GAME_CONFIG.THRESHOLDS.ROCKET.min} шт. При тапе, удаляет ряд.`, false, this.tileTextures[6])
+                this.addRuleRow(`Появление: сгорание кубиков от ${GAME_CONFIG.THRESHOLDS.BOMB_SMALL.min} шт. до ${GAME_CONFIG.THRESHOLDS.BOMB_SMALL.max} шт.`, false, this.tileTextures[1]);
+                this.addRuleRow(`Появление: сгорание кубиков от ${GAME_CONFIG.THRESHOLDS.ROCKET.min} шт. до ${GAME_CONFIG.THRESHOLDS.ROCKET.max} шт.`, false, this.tileTextures[6])
                 break;
 
             case 3:
                 // Описание телепорта + большая бомба
                 this.addRuleRow("Телепорт: Жми бустер и тапни на 2 объекта в поле для обмена.", false, this.tileTextures[2]);
-                this.addRuleRow(`Мега-бомба: лопнутая группа кубиков от ${GAME_CONFIG.THRESHOLDS.BOMB_MAX.min} шт. При тапе, взрывается.`, false, this.tileTextures[3]);
+                this.addRuleRow(`Появление: сгорание кубиков от ${GAME_CONFIG.THRESHOLDS.BOMB_MAX.min} шт. до ${GAME_CONFIG.THRESHOLDS.BOMB_MAX.max} шт.`, false, this.tileTextures[3]);
                 break;
 
             case 4:
                 // Правило про звезду
-                this.addRuleRow(`Звезда: от ${GAME_CONFIG.THRESHOLDS.COLOR_REMOVER.min} шт. Тапните звезду и соседа: удалит цвет или сделает комбо.`, false, this.tileTextures[4]);
+                this.addRuleRow(`Появление: сгорание >=${GAME_CONFIG.THRESHOLDS.COLOR_REMOVER.min} кубиков. Исползование: нажать на звезду и на клетку рядом.`, false, this.tileTextures[4]);
                 break;
 
             case 5:
@@ -382,7 +382,7 @@ export default class UIManager extends cc.Component {
             case MenuState.WIN:
                 if (this.menuTitle) this.menuTitle.string = "ПОБЕДА!";
                 if (this.btnRestart) this.btnRestart.active = true;
-                if (this.btnResume) this.btnResume.active = false;
+                if (this.btnResume) this.btnResume.active = true;
                 this.prepareEndDisplay(SoundType.WIN);
                 break;
 
@@ -397,7 +397,9 @@ export default class UIManager extends cc.Component {
     }
 
     private prepareEndDisplay(soundType: SoundType) {
-        if (this.btnResume) this.btnResume.active = false; 
+        if (soundType !== SoundType.WIN) {
+            if (this.btnResume) this.btnResume.active = false; 
+        }
         AudioManager.instance.playSFX(soundType);
     }
 
