@@ -1,0 +1,121 @@
+[
+  {
+    "__type__": "cc.Prefab",
+    "_name": "",
+    "_objFlags": 0,
+    "_native": "",
+    "data": {
+      "__id__": 1
+    },
+    "optimizationPolicy": 0,
+    "asyncLoadAssets": false,
+    "readonly": false
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "AudioManager",
+    "_objFlags": 0,
+    "_parent": null,
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 2
+      }
+    ],
+    "_prefab": {
+      "__id__": 3
+    },
+    "_opacity": 255,
+    "_color": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 255
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 0,
+      "height": 0
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_trs": {
+      "__type__": "TypedArray",
+      "ctor": "Float64Array",
+      "array": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "_eulerAngles": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_skewX": 0,
+    "_skewY": 0,
+    "_is3DNode": false,
+    "_groupIndex": 0,
+    "groupIndex": 0,
+    "_id": ""
+  },
+  {
+    "__type__": "9567827iqBIroYY0sVCnazX",
+    "_name": "",
+    "_objFlags": 0,
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "soundSmall": {
+      "__uuid__": "713bda07-a5b5-46da-8991-8e14dce42c3d"
+    },
+    "soundBig": {
+      "__uuid__": "026db5d2-f94b-4f5c-be23-b57d67a04f77"
+    },
+    "rocket": {
+      "__uuid__": "1085434c-0ba7-4b6d-8e28-f5685dcc8716"
+    },
+    "bombSmall": {
+      "__uuid__": "f5206ebb-e5ed-4949-9275-da73204b543a"
+    },
+    "bombBig": {
+      "__uuid__": "33871a95-61d6-4b1f-8967-4d877ea9a930"
+    },
+    "soundWin": {
+      "__uuid__": "bde694d0-ffdb-4d4d-b21f-a205f1312da6"
+    },
+    "soundLose": {
+      "__uuid__": "bfe032bf-dfd7-4d3d-95bc-f0f71ada1b47"
+    },
+    "soundShuffle": {
+      "__uuid__": "401ee0b4-00fa-4a1c-9154-8443e13d4392"
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "",
+    "sync": false
+  }
+]
