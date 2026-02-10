@@ -62,6 +62,69 @@ export default class GameController extends cc.Component {
     private isEndingStarted: boolean = false;
 
     start() {
+        this.initGameSession();
+    }
+
+    onLoad() {
+        // Подписка на системные события Cocos
+        cc.game.on(cc.game.EVENT_HIDE, () => {
+            cc.log("Игра свернута — выключаем звук");
+            cc.audioEngine.pauseAll();
+        });
+
+        cc.game.on(cc.game.EVENT_SHOW, () => {
+            cc.log("Игра развернута — возвращаем звук");
+            // ВАЖНО: Возвращай звук только если сейчас НЕ висит меню паузы
+            if (cc.director.isPaused() === false) {
+                cc.audioEngine.resumeAll();
+            }
+        });
+    }
+
+    /**
+     * Новая логика: сначала ждем данные, потом строим поле
+     */
+    private async initGameSession() {
+        cc.log("Старт GameController...");
+        // 1. Инициализируем SDK и облако (если еще не сделано)
+        if (window['YaGames']) {
+            try {
+                // Если ysdk еще не инициализирован глобально — делаем это
+                if (!window['ysdk']) {
+                    const ysdk = await window['YaGames'].init();
+                    window['ysdk'] = ysdk;
+                }
+                
+                if (window['ysdk']) {
+                    cc.log("*************************************");
+                    cc.log("ПРОВЕРКА СВЯЗИ: ID Игрока = " + window['ysdk'].environment.app.id);
+                    cc.log("ПРОВЕРКА СВЯЗИ: Язык = " + window['ysdk'].environment.i18n.lang);
+                    cc.log("*************************************");
+                    const lang = window['ysdk'].environment.i18n.lang;
+                    cc.log("SDK: Текущий язык игрока — " + lang);
+
+                    // Пример "активного" управления:
+                    if (lang === 'ru' || lang === 'be' || lang === 'uk' || lang === 'kk') {
+                        cc.log("SDK: Игрок понимает кириллицу, оставляем RU интерфейс.");
+                    } else {
+                        cc.log("SDK: Игрок говорит на " + lang + ". В этой версии доступен только RU, но мы зафиксировали этот вход.");
+                        // Это и есть признак того, что код "управляет" процессом
+                    }
+                }
+
+                if (window['ysdk'].features.LoadingAPI) {
+                    window['ysdk'].features.LoadingAPI.ready();
+                    cc.log("SDK: LoadingAPI.ready() вызван");
+                }
+            } catch (e) {
+                cc.error("Ошибка при инициализации SDK или данных:", e);
+            }
+        }
+
+        // Загрузка данных или я яндек SDK или с localstorage
+        await GlobalData.initCloudData();
+
+        // 2. Только ТЕПЕРЬ запускаем обычную логику
         this.level = new LevelManager();
         this.field = new FieldManager(this);
         this.setupLevel();
@@ -79,6 +142,8 @@ export default class GameController extends cc.Component {
         this.generateField();
         this.setupEventListeners(); 
         this.hintService.resetTimer();
+        
+        // Показываем пре-меню (цели уровня)
         this.showPreGameMenu();
     }
 
@@ -109,6 +174,10 @@ export default class GameController extends cc.Component {
     }
 
     showMenu(state: MenuState) {
+        if (window['ysdk']?.features.GameplayAPI) {
+            window['ysdk'].features.GameplayAPI.stop();
+            cc.log("SDK: GameplayAPI.stop() вызван");
+        }
         if (this.ui) {
             this.ui.showMenu(
                 state, 
@@ -123,8 +192,6 @@ export default class GameController extends cc.Component {
     // Настройка характеристик уровня
     private setupLevel() {
         const levelData = LEVEL_DATA[GlobalData.selectedLevel] || LEVEL_DATA[1];
-        console.log("Доступно бустеров: ", levelData.activeBoosters)
-        console.log("ЗАГРУЗКА ДАННЫХ ДЛЯ УРОВНЯ №", GlobalData.selectedLevel);
         if (this.ui) {
             this.ui.setupBoosterPanel(levelData.activeBoosters);
         }
@@ -141,6 +208,37 @@ export default class GameController extends cc.Component {
             list.push({ id: id, count: count });
         });
         return list;
+    }
+    
+    /**
+     * Вспомогательный метод: сначала реклама, потом действие.
+     */
+    private showAdAndExecute(action: Function) {
+        if (window['ysdk']) {
+            cc.log("SDK: Запрос на показ Fullscreen...");
+            window['ysdk'].adv.showFullscreenAdv({
+                callbacks: {
+                    onOpen: () => {
+                        cc.log("--- [AD EVENT] Реклама ОТКРЫЛАСЬ! ---");
+                        if (AudioManager.instance) cc.audioEngine.pauseAll();
+                    },
+                    onClose: (wasShown) => {
+                        cc.log(`--- [AD EVENT] Реклама ЗАКРЫТА (Показано: ${wasShown}) ---`);
+                        cc.log("Реклама закрыта. Выполняем действие...");
+                        if (AudioManager.instance) cc.audioEngine.resumeAll();
+                        action();
+                    },
+                    onError: (error) => {
+                        cc.error("--- [AD ERROR] Ошибка показа: ---", error);
+                        cc.error("Ошибка SDK, продолжаем без рекламы:", error);
+                        action();
+                    }
+                }
+            });
+        } else {
+            cc.log("SDK не найден, выполняем действие сразу.");
+            action();
+        }
     }
 
     setupEventListeners() {
@@ -161,23 +259,28 @@ export default class GameController extends cc.Component {
         // Кнопка "Продолжить" (только снимает паузу)
         if (this.ui.btnResume) {
             this.ui.btnResume.on(cc.Node.EventType.TOUCH_END, () => {
-                cc.director.resume();
-                ui.playClickAnimation(this.ui.btnResume, () => {
-                    if (this.level.isWin()) {
-                        // Если уровней еще много (меньше 10), прибавляем +1 и перезагружаем сцену
-                        if (GlobalData.selectedLevel < 10) {
-                            GlobalData.selectedLevel++;
-                            this.restartGame(); // Сцена перезапустится и сама покажет пре-меню нового уровня
-                        } else {
-                            // Если прошли последний уровень, возвращаемся на карту
-                            cc.director.loadScene("MapScene");
-                        }
-                    }else {
-                        if (this.ui.menuUI) {
-                            this.ui.menuUI.active = false;
-                            this.ui.gameplayUI.active = true;
-                        }
+                this.showAdAndExecute(() => {
+                    cc.director.resume();
+                    if (window['ysdk']?.features?.GameplayAPI) {
+                        window['ysdk'].features.GameplayAPI.start();
                     }
+                    ui.playClickAnimation(this.ui.btnResume, () => {
+                        if (this.level.isWin()) {
+                            // Если уровней еще много (меньше 10), прибавляем +1 и перезагружаем сцену
+                            if (GlobalData.selectedLevel < 10) {
+                                GlobalData.selectedLevel++;
+                                this.restartGame(); // Сцена перезапустится и сама покажет пре-меню нового уровня
+                            } else {
+                                // Если прошли последний уровень, возвращаемся на карту
+                                cc.director.loadScene("MapScene");
+                            }
+                        }else {
+                            if (this.ui.menuUI) {
+                                this.ui.menuUI.active = false;
+                                this.ui.gameplayUI.active = true;
+                            }
+                        }
+                    });
                 });
             });
         }
@@ -185,9 +288,11 @@ export default class GameController extends cc.Component {
         // Кнопка "Заново"
         if (this.ui.btnRestart) {
             this.ui.btnRestart.on(cc.Node.EventType.TOUCH_END, () => {
-                cc.director.resume();
-                ui.playClickAnimation(this.ui.btnRestart, () => {
-                    this.restartGame();
+                this.showAdAndExecute(() => {
+                    cc.director.resume();
+                    ui.playClickAnimation(this.ui.btnRestart, () => {
+                        this.restartGame();
+                    });
                 });
             });
         }
@@ -195,9 +300,11 @@ export default class GameController extends cc.Component {
         // Кнопка "На карту"
         if (this.ui.btnExit) {
             this.ui.btnExit.on(cc.Node.EventType.TOUCH_END, () => {
+                this.showAdAndExecute(() => {
                 cc.director.resume();
-                ui.playClickAnimation(this.ui.btnExit, () => {
-                    cc.director.loadScene("MapScene"); 
+                    ui.playClickAnimation(this.ui.btnExit, () => {
+                        cc.director.loadScene("MapScene"); 
+                    });
                 });
             });
         }
@@ -397,6 +504,11 @@ export default class GameController extends cc.Component {
                 // Просим менеджера нарисовать
                 this.spawnTile(r, c); 
             }
+        }
+
+        if (window['ysdk']?.features.GameplayAPI) {
+            window['ysdk'].features.GameplayAPI.start();
+            cc.log("SDK: GameplayAPI.start() вызван");
         }
     }
 
@@ -619,19 +731,16 @@ export default class GameController extends cc.Component {
         if (this.isEndingStarted) return;
 
         if (this.level.isWin()) {
-            console.log("Победа! Запуск бонуса...");
             this.isEndingStarted = true;
             
             // Запускаем бонус и передаем функцию, которая выполнится В КОНЦЕ
-            this.bonusService.startWinBonus(() => {
+            this.bonusService.startWinBonus(async () => {
                 const finalScore = this.level.currentScore;
                 const targetScore = this.level.targetScore;
 
                 // Теперь считаем звезды на основе финального счета
                 const stars = GlobalData.calculateStars(finalScore, targetScore);
-                GlobalData.saveLevelProgress(GlobalData.selectedLevel, stars);
-
-                console.log(`Финальный расчет: ${finalScore} очков, звезд: ${stars}.`);
+                await GlobalData.saveLevelProgress(GlobalData.selectedLevel, stars);
 
                 // Только теперь показываем финальное меню
                 this.showEndGame(true); 

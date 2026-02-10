@@ -29,7 +29,18 @@ export default class MapManager extends cc.Component {
     @property(MapRender) bg3: MapRender = null;
     @property(MapRender) bg4: MapRender = null;
 
-    start() {
+    async start() {
+        if (window['YaGames'] && !window['ysdk']) {
+            try {
+                const ysdk = await window['YaGames'].init();
+                window['ysdk'] = ysdk;
+                console.log("MapManager: SDK Яндекса инициализирован успешно");
+            } catch (e) {
+                console.log("MapManager: Ошибка инициализации SDK Яндекса:", e);
+            }
+        }
+        await GlobalData.initCloudData(); // Ждем завершения загрузки
+
         this.initMapArrows();
         this.setupLevels();
     }
@@ -102,7 +113,6 @@ export default class MapManager extends cc.Component {
         
         if (!isNaN(levelId)) {
             GlobalData.selectedLevel = levelId;
-            console.log("Выбран уровень:", GlobalData.selectedLevel);
         } else {
             cc.error("Ошибка: CustomEventData в инспекторе пуст или содержит не число!");
             GlobalData.selectedLevel = 1; // Запасной вариант

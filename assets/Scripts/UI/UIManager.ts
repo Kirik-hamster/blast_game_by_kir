@@ -126,7 +126,7 @@ export default class UIManager extends cc.Component {
         }
 
         const allRules = this.rulesContainer.children;
-        const targetFontSize = allRules.length >= 3 ? 25 : 35;
+        const targetFontSize = allRules.length >= 3 ? 25 : 30;
 
         allRules.forEach(ruleNode => {
             let labelNode = ruleNode.getChildByName("Lable Rule");
@@ -138,6 +138,11 @@ export default class UIManager extends cc.Component {
                 }
             }
         });
+
+        const layout = this.rulesContainer.getComponent(cc.Layout);
+        if (layout) {
+            layout.updateLayout();
+        }
     }
 
     /**
@@ -430,6 +435,11 @@ export default class UIManager extends cc.Component {
             let label = item.getChildByName("Count").getComponent(cc.Label);
             label.string = `х  ${t.count}`;
         });
+
+        const layout = this.targetContainer.getComponent(cc.Layout);
+        if (layout) {
+            layout.updateLayout(); // Выстраиваем иконки целей в ряд
+        }
 
         this.setupLevelRules();
     }
