@@ -111,11 +111,6 @@ export default class GameController extends cc.Component {
                         // Это и есть признак того, что код "управляет" процессом
                     }
                 }
-
-                if (window['ysdk'].features.LoadingAPI) {
-                    window['ysdk'].features.LoadingAPI.ready();
-                    cc.log("SDK: LoadingAPI.ready() вызван");
-                }
             } catch (e) {
                 cc.error("Ошибка при инициализации SDK или данных:", e);
             }
@@ -145,6 +140,25 @@ export default class GameController extends cc.Component {
         
         // Показываем пре-меню (цели уровня)
         this.showPreGameMenu();
+
+    }
+
+    /**
+     * Управляет состоянием GameplayAPI в зависимости от того,
+     * видит ли игрок игровое поле или меню.
+     */
+    private toggleGameplayState(isActive: boolean) {
+        if (!window['ysdk'] || !window['ysdk'].features.GameplayAPI) return;
+
+        if (isActive) {
+            // Запускаем, если еще не запущено
+            window['ysdk'].features.GameplayAPI.start();
+            cc.log("SDK: GameplayAPI START (Поле открыто)");
+        } else {
+            // Останавливаем
+            window['ysdk'].features.GameplayAPI.stop();
+            cc.log("SDK: GameplayAPI STOP (Меню открыто)");
+        }
     }
 
     /**
@@ -169,15 +183,13 @@ export default class GameController extends cc.Component {
             this.ui.setupTargetMenu(this.getActualTargetsList(), this.tileTextures);
             
             // 4. Паузим игру, пока игрок читает цели
+            this.toggleGameplayState(false);
             cc.director.pause();
         }
     }
 
     showMenu(state: MenuState) {
-        if (window['ysdk']?.features.GameplayAPI) {
-            window['ysdk'].features.GameplayAPI.stop();
-            cc.log("SDK: GameplayAPI.stop() вызван");
-        }
+        this.toggleGameplayState(false);
         if (this.ui) {
             this.ui.showMenu(
                 state, 
@@ -261,9 +273,7 @@ export default class GameController extends cc.Component {
             this.ui.btnResume.on(cc.Node.EventType.TOUCH_END, () => {
                 this.showAdAndExecute(() => {
                     cc.director.resume();
-                    if (window['ysdk']?.features?.GameplayAPI) {
-                        window['ysdk'].features.GameplayAPI.start();
-                    }
+                    this.toggleGameplayState(true);
                     ui.playClickAnimation(this.ui.btnResume, () => {
                         if (this.level.isWin()) {
                             // Если уровней еще много (меньше 10), прибавляем +1 и перезагружаем сцену
@@ -505,11 +515,6 @@ export default class GameController extends cc.Component {
                 this.spawnTile(r, c); 
             }
         }
-
-        if (window['ysdk']?.features.GameplayAPI) {
-            window['ysdk'].features.GameplayAPI.start();
-            cc.log("SDK: GameplayAPI.start() вызван");
-        }
     }
 
     /**
@@ -732,6 +737,8 @@ export default class GameController extends cc.Component {
 
         if (this.level.isWin()) {
             this.isEndingStarted = true;
+
+            this.toggleGameplayState(false);
             
             // Запускаем бонус и передаем функцию, которая выполнится В КОНЦЕ
             this.bonusService.startWinBonus(async () => {
@@ -812,6 +819,7 @@ export default class GameController extends cc.Component {
     // Метод для кнопки "ДА" (сброс игры)
     restartGame() {
         // Перезагружаем текущую сцену целиком
+        this.toggleGameplayState(false);
         cc.director.loadScene(cc.director.getScene().name);
     }
 

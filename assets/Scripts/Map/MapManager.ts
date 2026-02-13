@@ -34,12 +34,34 @@ export default class MapManager extends cc.Component {
             try {
                 const ysdk = await window['YaGames'].init();
                 window['ysdk'] = ysdk;
-                console.log("MapManager: SDK Яндекса инициализирован успешно");
+                cc.log("MapManager: SDK Яндекса инициализирован успешно");
             } catch (e) {
-                console.log("MapManager: Ошибка инициализации SDK Яндекса:", e);
+                cc.log("MapManager: Ошибка инициализации SDK Яндекса:", e);
             }
         }
         await GlobalData.initCloudData(); // Ждем завершения загрузки
+
+        if (window['ysdk']) {
+            // Активируем I18N (иконка станет зеленой)
+            const lang = window['ysdk'].environment.i18n.lang;
+            cc.log("MapManager: SDK I18N — " + lang);
+
+            // Ждем, когда Cocos отрисует первый кадр Карты
+            cc.director.once(cc.Director.EVENT_AFTER_DRAW, () => {
+                // Теперь вызываем API Яндекса. В этот момент браузер точно готов.
+
+                if (window['ysdk'].features.LoadingAPI) {
+                    window['ysdk'].features.LoadingAPI.ready();
+                    cc.log("SDK: LoadingAPI.ready() вызван штатно");
+                }
+
+                if (window['ysdk'].features.GameplayAPI) {
+                    window['ysdk'].features.GameplayAPI.stop();
+                    cc.log("SDK: GameplayAPI.stop() вызван штатно");
+                }
+
+            });
+        }
 
         this.initMapArrows();
         this.setupLevels();
